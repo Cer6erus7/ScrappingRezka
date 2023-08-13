@@ -1,12 +1,11 @@
 import re
 from time import sleep
-from pprint import pprint
 import requests
 from bs4 import BeautifulSoup
 
 
 URL = "https://rezka.ag/films"
-HOST = "https://rezka.ag/"
+HOST = "https://rezka.ag"
 HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)"
@@ -25,26 +24,35 @@ class NotFoundGenre(Exception): pass
 def get_html(url, params=''):
     return requests.get(url, headers=HEADERS, params=params)
 
-def get_content(html):
+
+def get_content(cards):
+    for card in cards:
+        dct = {
+            'title': card.find('div', class_="b-content__inline_item-link").find('a').text,
+            'country': re.split('[ ,]', card.find('div', class_="b-content__inline_item-link").find('div').text)[2],
+            'year': re.split('[ ,]', card.find('div', class_="b-content__inline_item-link").find('div').text)[0],
+            'genre': re.split('[ ,]', card.find('div', class_="b-content__inline_item-link").find('div').text)[4],
+            'link': HOST + card.find('div', class_='b-content__inline_item-cover').find('a').get('href'),
+            'img_link': card.find('div', class_='b-content__inline_item-cover').find('img').get('src')
+        }
+        yield dct
+
+
+def main_scrapping():
     page = 1
+    html = get_html(URL)
     while True:
         soup = BeautifulSoup(html.text, "lxml")
         cards = soup.find_all("div", class_="b-content__inline_item")
 
-        for card in cards:
-            dct = {
-                'title': card.find('div', class_="b-content__inline_item-link").find('a').text,
-                'country': re.split('[ ,]', card.find('div', class_="b-content__inline_item-link").find('div').text)[2],
-                'year': re.split('[ ,]', card.find('div', class_="b-content__inline_item-link").find('div').text)[0],
-                'genre': re.split('[ ,]', card.find('div', class_="b-content__inline_item-link").find('div').text)[4],
-                'link': card.find('div', class_='b-content__inline_item-cover').find('a').get('href'),
-                'img_link': card.find('div', class_='b-content__inline_item-cover').find('img').get('src')
-            }
-            yield dct
+        for item in get_content(cards):
+            yield item
 
         page += 1
-        html = get_html(URL + f"page/{page}")
+        html = get_html(URL + f"/page/{page}")
         sleep(1)
+
+
 
 
 if __name__ == "__main__":
@@ -58,11 +66,10 @@ if __name__ == "__main__":
     if films_country not in FILMS_COUNTRY:
         raise NotFoundCountry("Такой страны не существует, убедитесь что вы всё правильно написали!")
 
-    html = get_html(URL)
     films_count = 0
-    for film in get_content(html):
+    for film in main_scrapping():
         if films_count == films_number:
-            print("Конец парсера!")
+            print("Конец парсинга!")
             break
 
         if films_genre == film["genre"].lower() and films_country == film["country"].lower():
@@ -72,5 +79,5 @@ if __name__ == "__main__":
             print(f'Страна выпуска - {film["country"]}')
             print(f'Ссылка на картинку - {film["img_link"]}')
             print(f'Ссылка на фильм - {film["link"]}')
-            print(f"Позиция - {films_count+1}\n")
+            print(f"Позиция - {films_count + 1}\n")
             films_count += 1
